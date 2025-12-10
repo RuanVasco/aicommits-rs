@@ -2,6 +2,7 @@ mod config;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use dialoguer::{Select, theme::ColorfulTheme};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
@@ -15,7 +16,13 @@ struct Cli {
     command: Option<Commands>,
 
     #[arg(short, long)]
+    all: bool,
+
+    #[arg(short, long)]
     print_only: bool,
+
+    #[arg(short, long, default_value = "English")]
+    language: String,
 }
 
 #[derive(Subcommand)]
@@ -79,7 +86,7 @@ fn get_git_diff() -> Result<String> {
     Ok(diff)
 }
 
-async fn generate_commit(api_key: &str, model: &str, diff: &str) -> Result<String> {
+async fn generate_commit(api_key: &str, model: &str, diff: &str, language: &str) -> Result<String> {
     let url = format!(
         "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
         model, api_key
@@ -88,12 +95,13 @@ async fn generate_commit(api_key: &str, model: &str, diff: &str) -> Result<Strin
     let prompt_text = format!(
         "Act as a commit message generator. 
         Analyze the git diff below and generate a SINGLE, complete line of commit message following the Conventional Commits specification (e.g., feat, fix, chore, docs).
-        The message must be concise, objective, and in English.
+        The message must be concise, objective, and in {language}.
         Do not truncate the sentence. Do not use quotes or markdown code blocks.
         
         Diff:
-        {}",
-        diff
+        {diff}",
+        language = language,
+        diff = diff
     );
 
     let body = GenerateContentRequest {
@@ -141,24 +149,67 @@ async fn main() -> Result<()> {
 
     let cfg = config::load_or_setup().await?;
 
+    if cli.all {
+        println!("Adicionando todos os arquivos (git add .)...");
+        let add_all_status = Command::new("git")
+            .arg("add")
+            .arg(".")
+            .status()
+            .context("Falha ao executar git add")?;
+
+        if !add_all_status.success() {
+            anyhow::bail!("O git add falhou.");
+        }
+    }
+
     println!("Analisando alterações no git...");
     let diff = get_git_diff()?;
 
-    let msg = generate_commit(&cfg.api_key, &cfg.model, &diff).await?;
+    let final_msg: String;
 
-    if cli.print_only {
-        println!("\n--- Sugestão de Commit Message ---\n");
-        println!("{}", msg);
-        println!("\n----------------------------------");
-        return Ok(());
+    loop {
+        println!("Gerando mensagem de commit com {}...", cfg.model);
+        let msg = generate_commit(&cfg.api_key, &cfg.model, &diff, &cli.language).await?;
+
+        if cli.print_only {
+            println!("\n--- Sugestão de Commit Message ---\n");
+            println!("{}", msg);
+            println!("\n----------------------------------");
+            return Ok(());
+        }
+
+        println!("\nSugestão: \x1b[1;32m{}\x1b[0m\n", msg);
+
+        let options = vec!["Confirmar (Commit & Push)", "Gerar Novamente", "Cancelar"];
+
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("O que deseja fazer?")
+            .default(0)
+            .items(&options)
+            .interact()?;
+
+        match selection {
+            0 => {
+                final_msg = msg;
+                break;
+            }
+            1 => {
+                println!("Tentando outra opção...\n");
+                continue;
+            }
+            _ => {
+                println!("Operação cancelada pelo usuário.");
+                return Ok(());
+            }
+        }
     }
 
     let commit_status = Command::new("git")
         .arg("commit")
         .arg("-m")
-        .arg(&msg)
+        .arg(&final_msg)
         .status()
-        .context("Falhga ao executar git commit")?;
+        .context("Falha ao executar git commit")?;
 
     if !commit_status.success() {
         anyhow::bail!("O git commit falhou. Verifique se há arquivos staged.");
