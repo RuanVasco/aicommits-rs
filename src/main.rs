@@ -7,11 +7,15 @@ use serde::{Deserialize, Serialize};
 use std::process::Command;
 
 #[derive(Parser)]
-#[command(name = "aicommits")]
-#[command(about = "Gera mensagens de commit usando IA", long_about = None)]
+#[command(name = "aic")]
+#[command(version)]
+#[command(about)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+
+    #[arg(short, long)]
+    print_only: bool,
 }
 
 #[derive(Subcommand)]
@@ -140,13 +144,37 @@ async fn main() -> Result<()> {
     println!("Analisando alterações no git...");
     let diff = get_git_diff()?;
 
-    println!("Gerando mensagem de commit com {}...", cfg.model);
-
     let msg = generate_commit(&cfg.api_key, &cfg.model, &diff).await?;
 
-    println!("\n--- Sugestão de Commit Message ---\n");
-    println!("{}", msg);
-    println!("\n----------------------------------");
+    if cli.print_only {
+        println!("\n--- Sugestão de Commit Message ---\n");
+        println!("{}", msg);
+        println!("\n----------------------------------");
+        return Ok(());
+    }
 
-    Ok(())
+    let commit_status = Command::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg(&msg)
+        .status()
+        .context("Falhga ao executar git commit")?;
+
+    if !commit_status.success() {
+        anyhow::bail!("O git commit falhou. Verifique se há arquivos staged.");
+    }
+
+    println!("Executando git push...");
+
+    let push_status = Command::new("git")
+        .arg("push")
+        .status()
+        .context("Falha ao executar git push")?;
+
+    if push_status.success() {
+        println!("Sucesso! Alterações enviadas.");
+        return Ok(());
+    }
+
+    anyhow::bail!("O git push falhou. Verifique sua conexão ou permissões.");
 }

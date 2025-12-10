@@ -1,7 +1,14 @@
 [package]
 name = "aicommits-rs"
+description = "A Rust-based CLI tool that generates semantic Conventional Commits messages using Google Gemini AI."
+authors = ["Ruan Vasconcelos"]
+license = "GPL-3.0-only"
 version = "0.1.0"
 edition = "2024"
+
+[[bin]]
+name = "aic"        
+path = "src/main.rs"
 
 [dependencies]
 reqwest = { version = "0.12.25", features = ["json", "rustls-tls"] }
@@ -13,3 +20,17 @@ clap = {version = "4.5.53", features = ["derive"]}
 dialoguer = "0.12.0"
 directories = "6.0.0"
 toml = "0.9.8"
+
+[package.metadata.deb]
+maintainer = "Ruan Vasconcelos <ruanvasconcelos898@gmail.com>"
+copyright = "2025, Ruan Vasconcelos"
+depends = "$auto"
+section = "utils"
+priority = "optional"
+extended-description = """
+A simple and powerful CLI tool for generating commit messages.
+Uses Google Gemini AI to analyze your diffs and suggest text.
+"""
+assets = [
+    ["target/release/aic", "usr/bin/aic", "755"]
+]
