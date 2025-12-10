@@ -1,4 +1,4 @@
-# aicommits-rs 🦀
+# aicommits-rs
 
 ![Status](https://img.shields.io/badge/Status-Active-success)
 ![Language](https://img.shields.io/badge/Rust-2024-orange)
