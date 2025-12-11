@@ -5,18 +5,9 @@
 ![License](https://img.shields.io/badge/License-GPLv3-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-yellow)
 
-**aicommits-rs** (executable: `aic`) is a powerful CLI tool written in Rust that automates your git workflow. It uses **Google Gemini AI** to analyze your staged changes (`git diff`) and generates concise, semantic commit messages following the **Conventional Commits** specification.
+**aicommits-rs** (executable: `aic`) is a CLI tool written in Rust that automates your git workflow. It uses **Google Gemini AI** to analyze your staged changes (`git diff`) and generates concise, semantic commit messages following the **Conventional Commits** specification.
 
 It handles the generation, commit, and push process for you, saving time and ensuring a standardized history.
-
-## Features
-
-- **Blazing Fast:** Built with Rust for native performance.
-- **AI Powered:** Integrates with Google Gemini.
-- **Conventional Commits:** Generates messages like `feat:`, `fix:`, `chore:`, `docs:`.
-- **Interactive Setup:** Easy configuration for API Keys and Model selection.
-- **Persistent Config:** Remembers your preferences (stored in `~/.config` or `%APPDATA%`).
-- **Cross-Platform:** Works seamlessly on **Windows** and **Linux**.
 
 ## Installation
 
