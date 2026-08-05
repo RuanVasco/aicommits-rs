@@ -1,10 +1,9 @@
 mod config;
+mod providers;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use dialoguer::{Select, theme::ColorfulTheme};
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use std::process::Command;
 
 #[derive(Parser)]
@@ -23,43 +22,14 @@ struct Cli {
 
     #[arg(short, long, default_value = "English")]
     language: String,
+
+    #[arg(short = 'y', long = "push")]
+    push: bool,
 }
 
 #[derive(Subcommand)]
 enum Commands {
     Setup,
-}
-
-#[derive(Serialize)]
-struct GenerateContentRequest {
-    contents: Vec<Content>,
-    generation_config: GenerationConfig,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Content {
-    parts: Vec<Part>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Part {
-    text: String,
-}
-
-#[derive(Serialize)]
-struct GenerationConfig {
-    max_output_tokens: u32,
-    temperature: f32,
-}
-
-#[derive(Deserialize)]
-struct GenerateContentResponse {
-    candidates: Vec<Candidate>,
-}
-
-#[derive(Deserialize)]
-struct Candidate {
-    content: Content,
 }
 
 fn get_git_diff() -> Result<String> {
@@ -84,58 +54,6 @@ fn get_git_diff() -> Result<String> {
     }
 
     Ok(diff)
-}
-
-async fn generate_commit(api_key: &str, model: &str, diff: &str, language: &str) -> Result<String> {
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        model, api_key
-    );
-
-    let prompt_text = format!(
-        "Act as a commit message generator. 
-        Analyze the git diff below and generate a SINGLE, complete line of commit message following the Conventional Commits specification (e.g., feat, fix, chore, docs).
-        The message must be concise, objective, and in {language}.
-        Do not truncate the sentence. Do not use quotes or markdown code blocks.
-        
-        Diff:
-        {diff}",
-        language = language,
-        diff = diff
-    );
-
-    let body = GenerateContentRequest {
-        contents: vec![Content {
-            parts: vec![Part { text: prompt_text }],
-        }],
-        generation_config: GenerationConfig {
-            max_output_tokens: 1024,
-            temperature: 0.2,
-        },
-    };
-
-    let client = Client::new();
-    let res = client.post(&url).json(&body).send().await?;
-
-    if !res.status().is_success() {
-        let err = res.text().await?;
-        anyhow::bail!("Erro da API ({}): {}", model, err);
-    }
-
-    let response_json: GenerateContentResponse = res.json().await?;
-
-    let text = response_json
-        .candidates
-        .first()
-        .context("Sem resposta")?
-        .content
-        .parts
-        .first()
-        .context("Sem texto")?
-        .text
-        .clone();
-
-    Ok(text.trim().to_string())
 }
 
 #[tokio::main]
@@ -165,11 +83,13 @@ async fn main() -> Result<()> {
     println!("Analisando alterações no git...");
     let diff = get_git_diff()?;
 
+    let provider = providers::build(&cfg.provider)?;
+
     let final_msg: String;
 
     loop {
-        println!("Gerando mensagem de commit com {}...", cfg.model);
-        let msg = generate_commit(&cfg.api_key, &cfg.model, &diff, &cli.language).await?;
+        println!("Gerando mensagem de commit com {}...", cfg.provider);
+        let msg = provider.generate(&diff, &cli.language).await?;
 
         if cli.print_only {
             println!("\n--- Sugestão de Commit Message ---\n");
@@ -180,7 +100,12 @@ async fn main() -> Result<()> {
 
         println!("\nSugestão: \x1b[1;32m{}\x1b[0m\n", msg);
 
-        let options = vec!["Confirmar (Commit & Push)", "Gerar Novamente", "Cancelar"];
+        let confirm_label = if cli.push {
+            "Confirmar (Commit & Push)"
+        } else {
+            "Confirmar (Commit)"
+        };
+        let options = vec![confirm_label, "Gerar Novamente", "Cancelar"];
 
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("O que deseja fazer?")
@@ -213,6 +138,13 @@ async fn main() -> Result<()> {
 
     if !commit_status.success() {
         anyhow::bail!("O git commit falhou. Verifique se há arquivos staged.");
+    }
+
+    println!("Commit realizado com sucesso.");
+
+    if !cli.push {
+        println!("Push não executado. Use -y/--push para enviar automaticamente após o commit.");
+        return Ok(());
     }
 
     println!("Executando git push...");

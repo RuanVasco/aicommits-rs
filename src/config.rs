@@ -1,63 +1,38 @@
+use crate::providers::gemini;
 use anyhow::{Context, Result};
 use dialoguer::{Input, Select, theme::ColorfulTheme};
 use directories::ProjectDirs;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Serialize, Deserialize, Debug)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AppConfig {
-    pub api_key: String,
-    pub model: String,
+    #[serde(flatten)]
+    pub provider: ProviderConfig,
 }
 
-#[derive(Deserialize)]
-struct ListModelsResponse {
-    models: Vec<ModelInfo>,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "provider")]
+pub enum ProviderConfig {
+    #[serde(rename = "gemini")]
+    Gemini { api_key: String, model: String },
 }
 
-#[derive(Deserialize)]
-struct ModelInfo {
-    name: String,
-    #[serde(rename = "supportedGenerationMethods")]
-    supported_methods: Option<Vec<String>>,
-}
-
-async fn get_models(api_key: &str) -> Result<Vec<String>> {
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models?key={}",
-        api_key
-    );
-
-    let client = Client::new();
-    let res = client.get(&url).send().await?;
-
-    if !res.status().is_success() {
-        anyhow::bail!("Falha ao listar modelos: {}", res.status());
-    }
-
-    let list: ListModelsResponse = res.json().await?;
-
-    let mut model_names = Vec::new();
-
-    for model in list.models {
-        if let Some(methods) = model.supported_methods {
-            if methods.contains(&"generateContent".to_string()) {
-                let clean_name = model.name.replace("models/", "");
-                model_names.push(clean_name);
-            }
+impl fmt::Display for ProviderConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProviderConfig::Gemini { model, .. } => write!(f, "{model} (Gemini)"),
         }
     }
+}
 
-    model_names.sort();
-    model_names.reverse();
-
-    if model_names.is_empty() {
-        anyhow::bail!("Nenhum modelo compatível encontrado.");
-    }
-
-    Ok(model_names)
+#[derive(Deserialize)]
+struct LegacyAppConfig {
+    api_key: String,
+    model: String,
 }
 
 fn get_config_path() -> Result<PathBuf> {
@@ -78,9 +53,24 @@ pub async fn load_or_setup() -> Result<AppConfig> {
 
     if config_path.exists() {
         let content = fs::read_to_string(&config_path)?;
-        let config: AppConfig = toml::from_str(&content)
-            .context("Arquivo de configuração corrompido. Tente rodar com --reset")?;
-        return Ok(config);
+
+        if let Ok(config) = toml::from_str::<AppConfig>(&content) {
+            return Ok(config);
+        }
+
+        if let Ok(legacy) = toml::from_str::<LegacyAppConfig>(&content) {
+            println!("Formato de configuração antigo detectado. Migrando para Gemini automaticamente...");
+            let migrated = AppConfig {
+                provider: ProviderConfig::Gemini {
+                    api_key: legacy.api_key,
+                    model: legacy.model,
+                },
+            };
+            save_config(&migrated)?;
+            return Ok(migrated);
+        }
+
+        anyhow::bail!("Arquivo de configuração corrompido. Rode 'aic setup' novamente.");
     }
 
     println!("Nenhuma configuração encontrada. Iniciando setup...");
@@ -97,7 +87,7 @@ pub async fn run_setup() -> Result<AppConfig> {
         .with_prompt("Cole sua Google Gemini API Key")
         .interact_text()?;
 
-    let models = match get_models(&api_key).await {
+    let models = match gemini::list_models(&api_key).await {
         Ok(list) => list,
         Err(e) => {
             println!("Não foi possível listar modelos automaticamente: {}", e);
@@ -117,8 +107,10 @@ pub async fn run_setup() -> Result<AppConfig> {
         .interact()?;
 
     let config = AppConfig {
-        api_key,
-        model: models[selection].to_string(),
+        provider: ProviderConfig::Gemini {
+            api_key,
+            model: models[selection].to_string(),
+        },
     };
 
     save_config(&config)?;
