@@ -13,7 +13,7 @@ It handles the generation, commit, and push process for you, saving time and ens
 
 Go to the [Releases Page](https://github.com/RuanVasco/aicommits-rs/releases) and download the version for your system:
 
-- **Windows:** Download `aic.exe`. Add it to your PATH or drop it in a folder like `C:\Windows`.
+- **Windows:** Download `aic.exe` **and** `libstdc++-6.dll` and keep them in the same folder (the DLL is required by the embedded local model's tokenizer). Add that folder to your PATH.
 - **Linux (Debian/Ubuntu):** Download the `.deb` file and install:
   ```bash
   sudo dpkg -i aic_0.1.0_amd64.deb

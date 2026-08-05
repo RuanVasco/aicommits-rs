@@ -1,0 +1,6 @@
+# Statically links the mingw C runtime (libgcc/libwinpthread) into aic.exe so it
+# doesn't depend on a mingw installation being present on the machine that runs it.
+# libstdc++-6.dll (needed by the tokenizers crate's C++ code) isn't covered by this
+# and is shipped alongside aic.exe instead - see Dockerfile.
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "target-feature=+crt-static"]
