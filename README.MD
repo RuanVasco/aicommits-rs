@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-GPLv3-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-yellow)
 
-**aicommits-rs** (executable: `aic`) is a CLI tool written in Rust that automates your git workflow. It analyzes your staged changes (`git diff`) and generates concise, semantic commit messages following the **Conventional Commits** specification, using whichever AI provider you configure: **Google Gemini**, any **OpenAI-compatible endpoint** (Ollama, LM Studio, llama.cpp server, OpenAI itself), or a small **embedded local model** that needs no API key at all.
+**aicommits-rs** (executable: `aic`) is a CLI tool written in Rust that automates your git workflow. It analyzes your staged changes (`git diff`) and generates concise, semantic commit messages following the **Conventional Commits** specification, using whichever AI provider you configure: **Google Gemini**, or any **OpenAI-compatible endpoint** (Ollama, LM Studio, llama.cpp server, OpenAI itself).
 
 It handles the generation, commit, and push process for you, saving time and ensuring a standardized history.
 
@@ -13,7 +13,7 @@ It handles the generation, commit, and push process for you, saving time and ens
 
 Go to the [Releases Page](https://github.com/RuanVasco/aicommits-rs/releases) and download the version for your system:
 
-- **Windows:** Download `aic.exe`, `libstdc++-6.dll`, and `libgcc_s_seh-1.dll`, and keep all three in the same folder (needed by the embedded local model's tokenizer). Add that folder to your PATH.
+- **Windows:** Download `aic.exe`. Add it to your PATH or drop it in a folder like `C:\Windows`.
 - **Linux (Debian/Ubuntu):** Download the `.deb` file and install:
   ```bash
   sudo dpkg -i aic_0.1.0_amd64.deb
@@ -34,8 +34,9 @@ aic setup
 ```
 
 - **Google Gemini** — needs a free API key from [Google AI Studio](https://aistudio.google.com/app/apikey). The wizard lists available models for you to pick from.
-- **OpenAI-compatible endpoint** — point it at any server that speaks the OpenAI chat-completions API: a local [Ollama](https://ollama.com/) (`http://localhost:11434/v1`), [LM Studio](https://lmstudio.ai/) (`http://localhost:1234/v1`), a `llama.cpp` server, or OpenAI itself. The API key is optional (most local servers don't need one). The wizard tries to list models from the endpoint automatically; if the server doesn't support that, you can type the model name manually.
-- **Embedded local model** — no API key, no server to run. The first time you generate a commit message, `aic` downloads a small quantized model (TinyLlama 1.1B, ~700MB) and caches it locally, then runs inference entirely on your machine (CPU). Slower and lower quality than the cloud options, but fully offline and "plug and play" after the first download.
+- **OpenAI-compatible endpoint** — point it at any server that speaks the OpenAI chat-completions API. Pick a preset for common local servers ([Ollama](https://ollama.com/) at `http://localhost:11434/v1`, [LM Studio](https://lmstudio.ai/) at `http://localhost:1234/v1`, OpenAI itself), or enter a custom URL (e.g. a `llama.cpp` server). The API key is optional (most local servers don't need one). The wizard tries to list models from the endpoint automatically; if the server doesn't support that, you can type the model name manually.
+
+Running a local model this way (e.g. via Ollama) gives you the same privacy/offline benefit as a fully embedded model, without `aic` itself needing to reload multi-gigabyte weights on every invocation — Ollama keeps the model loaded in the background between runs.
 
 ### 2. Generating a Commit (Standard Flow)
 
@@ -95,11 +96,6 @@ provider = "openai"
 base_url = "http://localhost:11434/v1"
 model = "llama3.1"
 # api_key = "..." # optional, omit for servers that don't require auth
-```
-
-```toml
-# Embedded local model
-provider = "embedded"
 ```
 
 Config files written by older versions (no `provider` key) are detected and migrated to the Gemini format automatically the first time you run `aic`.

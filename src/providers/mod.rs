@@ -1,4 +1,3 @@
-pub mod embedded;
 pub mod gemini;
 pub mod openai_compat;
 
@@ -35,7 +34,6 @@ pub fn build(cfg: &crate::config::ProviderConfig) -> Result<Box<dyn CommitProvid
             api_key.clone(),
             model.clone(),
         ))),
-        Embedded => Ok(Box::new(embedded::EmbeddedProvider::new())),
     }
 }
 

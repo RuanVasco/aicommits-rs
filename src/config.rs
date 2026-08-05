@@ -1,6 +1,6 @@
 use crate::providers::{gemini, openai_compat};
 use anyhow::{Context, Result};
-use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
+use dialoguer::{Input, Select, theme::ColorfulTheme};
 use directories::ProjectDirs;
 use std::fmt;
 use std::fs;
@@ -26,8 +26,6 @@ pub enum ProviderConfig {
         api_key: Option<String>,
         model: String,
     },
-    #[serde(rename = "embedded")]
-    Embedded,
 }
 
 impl fmt::Display for ProviderConfig {
@@ -37,7 +35,6 @@ impl fmt::Display for ProviderConfig {
             ProviderConfig::OpenAiCompatible {
                 model, base_url, ..
             } => write!(f, "{model} ({base_url})"),
-            ProviderConfig::Embedded => write!(f, "TinyLlama-1.1B-Chat (embedded, local)"),
         }
     }
 }
@@ -98,7 +95,6 @@ pub async fn run_setup() -> Result<AppConfig> {
     let provider_options = vec![
         "Google Gemini (API na nuvem)",
         "Endpoint OpenAI-compatible (Ollama, LM Studio, llama.cpp server, OpenAI, etc.)",
-        "Modelo local embutido (baixa um modelo pequeno automaticamente, sem API)",
     ];
 
     let provider_selection = Select::with_theme(&theme)
@@ -109,8 +105,7 @@ pub async fn run_setup() -> Result<AppConfig> {
 
     let config = match provider_selection {
         0 => setup_gemini(&theme).await?,
-        1 => setup_openai_compatible(&theme).await?,
-        _ => setup_embedded(&theme)?,
+        _ => setup_openai_compatible(&theme).await?,
     };
 
     save_config(&config)?;
@@ -153,15 +148,28 @@ async fn setup_gemini(theme: &ColorfulTheme) -> Result<AppConfig> {
     })
 }
 
-async fn setup_openai_compatible(theme: &ColorfulTheme) -> Result<AppConfig> {
-    println!(
-        "Informe a URL base da API (ex: http://localhost:11434/v1 para Ollama, \
-        http://localhost:1234/v1 para LM Studio, https://api.openai.com/v1 para OpenAI).\n"
-    );
+const SERVER_PRESETS: &[(&str, Option<&str>)] = &[
+    ("Ollama (http://localhost:11434/v1)", Some("http://localhost:11434/v1")),
+    ("LM Studio (http://localhost:1234/v1)", Some("http://localhost:1234/v1")),
+    ("OpenAI (https://api.openai.com/v1)", Some("https://api.openai.com/v1")),
+    ("Outro (informar URL manualmente)", None),
+];
 
-    let base_url: String = Input::with_theme(theme)
-        .with_prompt("URL base")
-        .interact_text()?;
+async fn setup_openai_compatible(theme: &ColorfulTheme) -> Result<AppConfig> {
+    let preset_labels: Vec<&str> = SERVER_PRESETS.iter().map(|(label, _)| *label).collect();
+
+    let preset_selection = Select::with_theme(theme)
+        .with_prompt("Qual servidor você quer usar?")
+        .default(0)
+        .items(&preset_labels)
+        .interact()?;
+
+    let base_url = match SERVER_PRESETS[preset_selection].1 {
+        Some(url) => url.to_string(),
+        None => Input::with_theme(theme)
+            .with_prompt("URL base")
+            .interact_text()?,
+    };
 
     let api_key_input: String = Input::with_theme(theme)
         .with_prompt("API Key (deixe em branco se o servidor local não exigir)")
@@ -183,8 +191,15 @@ async fn setup_openai_compatible(theme: &ColorfulTheme) -> Result<AppConfig> {
                 .interact()?;
             list[selection].clone()
         }
-        _ => {
-            println!("Não foi possível listar modelos automaticamente nesse endpoint.");
+        Ok(_) => {
+            println!("Nenhum modelo encontrado em {base_url}.");
+            Input::with_theme(theme)
+                .with_prompt("Digite o nome do modelo")
+                .interact_text()?
+        }
+        Err(e) => {
+            println!("Não foi possível listar modelos automaticamente em {base_url}: {e}");
+            println!("Confira se o servidor está rodando nesse endereço.");
             Input::with_theme(theme)
                 .with_prompt("Digite o nome do modelo")
                 .interact_text()?
@@ -197,27 +212,6 @@ async fn setup_openai_compatible(theme: &ColorfulTheme) -> Result<AppConfig> {
             api_key,
             model,
         },
-    })
-}
-
-fn setup_embedded(theme: &ColorfulTheme) -> Result<AppConfig> {
-    println!(
-        "O modelo local (TinyLlama 1.1B, ~700MB em Q4) será baixado automaticamente na \
-        primeira vez que você gerar uma mensagem de commit, e fica em cache no seu computador \
-        (não precisa de API key nem conexão depois disso)."
-    );
-
-    let confirmed = Confirm::with_theme(theme)
-        .with_prompt("Continuar com o modelo local embutido?")
-        .default(true)
-        .interact()?;
-
-    if !confirmed {
-        anyhow::bail!("Setup cancelado.");
-    }
-
-    Ok(AppConfig {
-        provider: ProviderConfig::Embedded,
     })
 }
 
@@ -289,19 +283,6 @@ mod tests {
     }
 
     #[test]
-    fn embedded_config_round_trips() {
-        let config = AppConfig {
-            provider: ProviderConfig::Embedded,
-        };
-
-        let toml_str = toml::to_string(&config).unwrap();
-        assert!(toml_str.contains("provider = \"embedded\""));
-
-        let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
-        assert!(matches!(parsed.provider, ProviderConfig::Embedded));
-    }
-
-    #[test]
     fn legacy_config_format_parses() {
         let legacy_toml = "api_key = \"old-key\"\nmodel = \"gemini-1.5-flash\"\n";
         let legacy: LegacyAppConfig = toml::from_str(legacy_toml).unwrap();
@@ -323,10 +304,5 @@ mod tests {
             model: "llama3.1".to_string(),
         };
         assert_eq!(openai.to_string(), "llama3.1 (http://localhost:11434/v1)");
-
-        assert_eq!(
-            ProviderConfig::Embedded.to_string(),
-            "TinyLlama-1.1B-Chat (embedded, local)"
-        );
     }
 }
