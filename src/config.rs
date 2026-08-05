@@ -148,28 +148,22 @@ async fn setup_gemini(theme: &ColorfulTheme) -> Result<AppConfig> {
     })
 }
 
-const SERVER_PRESETS: &[(&str, Option<&str>)] = &[
-    ("Ollama (http://localhost:11434/v1)", Some("http://localhost:11434/v1")),
-    ("LM Studio (http://localhost:1234/v1)", Some("http://localhost:1234/v1")),
-    ("OpenAI (https://api.openai.com/v1)", Some("https://api.openai.com/v1")),
-    ("Outro (informar URL manualmente)", None),
-];
+// Every OpenAI-compatible server (Ollama, LM Studio, llama.cpp server, OpenAI
+// itself) speaks the same chat-completions request/response shape, so there's
+// nothing service-specific to ask beyond the URL - defaulting to Ollama's address
+// just saves typing for the common case, it isn't a different code path.
+const DEFAULT_BASE_URL: &str = "http://localhost:11434/v1";
 
 async fn setup_openai_compatible(theme: &ColorfulTheme) -> Result<AppConfig> {
-    let preset_labels: Vec<&str> = SERVER_PRESETS.iter().map(|(label, _)| *label).collect();
+    println!(
+        "Informe a URL base do servidor (ex: {DEFAULT_BASE_URL} para Ollama, \
+        http://localhost:1234/v1 para LM Studio, https://api.openai.com/v1 para OpenAI)."
+    );
 
-    let preset_selection = Select::with_theme(theme)
-        .with_prompt("Qual servidor você quer usar?")
-        .default(0)
-        .items(&preset_labels)
-        .interact()?;
-
-    let base_url = match SERVER_PRESETS[preset_selection].1 {
-        Some(url) => url.to_string(),
-        None => Input::with_theme(theme)
-            .with_prompt("URL base")
-            .interact_text()?,
-    };
+    let base_url: String = Input::with_theme(theme)
+        .with_prompt("URL base")
+        .default(DEFAULT_BASE_URL.to_string())
+        .interact_text()?;
 
     let api_key_input: String = Input::with_theme(theme)
         .with_prompt("API Key (deixe em branco se o servidor local não exigir)")
