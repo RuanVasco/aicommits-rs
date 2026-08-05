@@ -19,10 +19,13 @@ COPY src ./src
 RUN cargo build --release --target x86_64-pc-windows-gnu
 
 # tokenizers' C++ code (esaxx-rs) links libstdc++ dynamically and crt-static doesn't
-# cover it, so aic.exe needs this DLL next to it on Windows. `-print-file-name` asks
-# gcc for whichever thread-model variant (posix/win32) is actually active, instead of
+# cover it, so aic.exe needs these DLLs next to it on Windows: libstdc++-6.dll itself,
+# plus libgcc_s_seh-1.dll which libstdc++-6.dll in turn depends on (checked with
+# `objdump -p`; nothing beyond it needs bundling). `-print-file-name` asks gcc for
+# whichever thread-model variant (posix/win32) is actually active, instead of
 # hardcoding a path that would break silently on a gcc version bump.
-RUN cp "$(x86_64-w64-mingw32-g++ -print-file-name=libstdc++-6.dll)" /app/libstdc++-6.dll
+RUN cp "$(x86_64-w64-mingw32-g++ -print-file-name=libstdc++-6.dll)" /app/libstdc++-6.dll && \
+    cp "$(x86_64-w64-mingw32-g++ -print-file-name=libgcc_s_seh-1.dll)" /app/libgcc_s_seh-1.dll
 
 # Empty final stage that only holds the built binary, so `docker create`
 # doesn't need to pull the whole ~1GB builder image just to copy it out.
@@ -32,4 +35,5 @@ RUN cp "$(x86_64-w64-mingw32-g++ -print-file-name=libstdc++-6.dll)" /app/libstdc
 FROM scratch AS export
 COPY --from=builder /app/target/x86_64-pc-windows-gnu/release/aic.exe /aic.exe
 COPY --from=builder /app/libstdc++-6.dll /libstdc++-6.dll
+COPY --from=builder /app/libgcc_s_seh-1.dll /libgcc_s_seh-1.dll
 CMD ["/aic.exe"]
