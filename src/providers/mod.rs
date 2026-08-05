@@ -1,4 +1,6 @@
+pub mod embedded;
 pub mod gemini;
+pub mod openai_compat;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -24,5 +26,29 @@ pub fn build(cfg: &crate::config::ProviderConfig) -> Result<Box<dyn CommitProvid
             api_key.clone(),
             model.clone(),
         ))),
+        OpenAiCompatible {
+            base_url,
+            api_key,
+            model,
+        } => Ok(Box::new(openai_compat::OpenAiCompatProvider::new(
+            base_url.clone(),
+            api_key.clone(),
+            model.clone(),
+        ))),
+        Embedded => Ok(Box::new(embedded::EmbeddedProvider::new())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_prompt;
+
+    #[test]
+    fn build_prompt_includes_diff_and_language() {
+        let prompt = build_prompt("diff --git a/foo b/foo", "Portuguese");
+
+        assert!(prompt.contains("diff --git a/foo b/foo"));
+        assert!(prompt.contains("Portuguese"));
+        assert!(prompt.contains("Conventional Commits"));
     }
 }

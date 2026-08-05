@@ -2,10 +2,11 @@
 
 # Builds aic.exe for Windows by cross-compiling from a Linux container,
 # so building the project doesn't require installing Rust (or mingw) on the host.
-FROM rust:1.85-slim-bookworm AS builder
+FROM rust:slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc-mingw-w64-x86-64 \
+    g++-mingw-w64-x86-64 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN rustup target add x86_64-pc-windows-gnu

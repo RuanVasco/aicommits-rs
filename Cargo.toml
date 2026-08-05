@@ -1,9 +1,9 @@
 [package]
 name = "aicommits-rs"
-description = "A Rust-based CLI tool that generates semantic Conventional Commits messages using Google Gemini AI."
+description = "A Rust-based CLI tool that generates semantic Conventional Commits messages using Google Gemini, any OpenAI-compatible endpoint, or a local embedded model."
 authors = ["Ruan Vasconcelos"]
 license = "GPL-3.0-only"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 
 [[bin]]
@@ -11,7 +11,7 @@ name = "aic"
 path = "src/main.rs"
 
 [dependencies]
-reqwest = { version = "0.12.25", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12.25", default-features = false, features = ["json", "rustls-tls"] }
 tokio = {version = "1.48.0", features = ["full"]}
 serde = {version = "1.0.228", features = ["derive"]}
 serde_json = "1.0.145"
@@ -21,6 +21,10 @@ dialoguer = "0.12.0"
 directories = "6.0.0"
 toml = "0.9.8"
 async-trait = "0.1"
+candle-core = "0.11.0"
+candle-transformers = "0.11.0"
+hf-hub = { version = "1.0.0", features = ["blocking", "rustls-tls"] }
+tokenizers = "0.23.1"
 
 [package.metadata.deb]
 maintainer = "Ruan Vasconcelos <ruanvasconcelos898@gmail.com>"
@@ -30,7 +34,9 @@ section = "utils"
 priority = "optional"
 extended-description = """
 A simple and powerful CLI tool for generating commit messages.
-Uses Google Gemini AI to analyze your diffs and suggest text.
+Analyzes your diffs and suggests text using Google Gemini, any
+OpenAI-compatible endpoint (Ollama, LM Studio, llama.cpp server,
+OpenAI), or a small embedded local model.
 """
 assets = [
     ["target/release/aic", "usr/bin/aic", "755"]
