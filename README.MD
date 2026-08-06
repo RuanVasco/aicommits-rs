@@ -16,7 +16,7 @@ Go to the [Releases Page](https://github.com/RuanVasco/aicommits-rs/releases) an
 - **Windows:** Download `aic.exe`. Add it to your PATH or drop it in a folder like `C:\Windows`.
 - **Linux (Debian/Ubuntu):** Download the `.deb` file and install:
   ```bash
-  sudo dpkg -i aic_0.1.0_amd64.deb
+  sudo dpkg -i aic_0.2.0_amd64.deb
   ```
 - **Linux (Arch):** Users on Arch Linux, Manjaro, or other derivatives can install the latest version via an AUR helper (like `yay` or `paru`):
   ```bash
