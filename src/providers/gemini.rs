@@ -72,7 +72,7 @@ impl CommitProvider for GeminiProvider {
 
         if !res.status().is_success() {
             let err = res.text().await?;
-            anyhow::bail!("Erro da API ({}): {}", self.model, err);
+            anyhow::bail!(t!("provider.api_error", model = self.model, err = err).to_string());
         }
 
         let response_json: GenerateContentResponse = res.json().await?;
@@ -80,11 +80,11 @@ impl CommitProvider for GeminiProvider {
         let text = response_json
             .candidates
             .first()
-            .context("Sem resposta")?
+            .context(t!("provider.no_response").to_string())?
             .content
             .parts
             .first()
-            .context("Sem texto")?
+            .context(t!("provider.no_text").to_string())?
             .text
             .clone();
 
@@ -114,7 +114,7 @@ pub async fn list_models(api_key: &str) -> Result<Vec<String>> {
     let res = client.get(&url).send().await?;
 
     if !res.status().is_success() {
-        anyhow::bail!("Falha ao listar modelos: {}", res.status());
+        anyhow::bail!(t!("provider.list_models_failed", status = res.status()).to_string());
     }
 
     let list: ListModelsResponse = res.json().await?;
@@ -134,7 +134,7 @@ pub async fn list_models(api_key: &str) -> Result<Vec<String>> {
     model_names.reverse();
 
     if model_names.is_empty() {
-        anyhow::bail!("Nenhum modelo compatível encontrado.");
+        anyhow::bail!(t!("provider.no_compatible_model").to_string());
     }
 
     Ok(model_names)

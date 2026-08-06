@@ -14,6 +14,7 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY .cargo ./.cargo
 COPY src ./src
+COPY locales ./locales
 
 RUN cargo build --release --target x86_64-pc-windows-gnu
 

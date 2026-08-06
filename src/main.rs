@@ -1,3 +1,8 @@
+#[macro_use]
+extern crate rust_i18n;
+
+i18n!("locales", fallback = "en");
+
 mod config;
 mod providers;
 
@@ -32,25 +37,32 @@ enum Commands {
     Setup,
 }
 
+fn init_locale() {
+    let system_locale = sys_locale::get_locale().unwrap_or_default();
+    let locale = if system_locale.to_lowercase().starts_with("pt") {
+        "pt-BR"
+    } else {
+        "en"
+    };
+    rust_i18n::set_locale(locale);
+}
+
 fn get_git_diff() -> Result<String> {
     let output = Command::new("git")
         .arg("diff")
         .arg("--staged")
         .output()
-        .context("Falha ao executar o comando 'git'. O git está instalado e no PATH?")?;
+        .context(t!("main.git_not_found").to_string())?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("Erro ao rodar git diff: {}", stderr);
+        anyhow::bail!(t!("main.git_diff_failed", stderr = stderr).to_string());
     }
 
-    let diff =
-        String::from_utf8(output.stdout).context("O output do git diff não é um UTF-8 válido")?;
+    let diff = String::from_utf8(output.stdout).context(t!("main.diff_not_utf8").to_string())?;
 
     if diff.trim().is_empty() {
-        anyhow::bail!(
-            "Nenhuma alteração staged encontrada. Use 'git add' antes de rodar o gerador."
-        );
+        anyhow::bail!(t!("main.no_staged_changes").to_string());
     }
 
     Ok(diff)
@@ -58,6 +70,8 @@ fn get_git_diff() -> Result<String> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    init_locale();
+
     let cli = Cli::parse();
 
     if let Some(Commands::Setup) = cli.command {
@@ -68,19 +82,19 @@ async fn main() -> Result<()> {
     let cfg = config::load_or_setup().await?;
 
     if cli.all {
-        println!("Adicionando todos os arquivos (git add .)...");
+        println!("{}", t!("main.adding_all"));
         let add_all_status = Command::new("git")
             .arg("add")
             .arg(".")
             .status()
-            .context("Falha ao executar git add")?;
+            .context(t!("main.git_add_context").to_string())?;
 
         if !add_all_status.success() {
-            anyhow::bail!("O git add falhou.");
+            anyhow::bail!(t!("main.git_add_failed").to_string());
         }
     }
 
-    println!("Analisando alterações no git...");
+    println!("{}", t!("main.analyzing"));
     let diff = get_git_diff()?;
 
     let provider = providers::build(&cfg.provider)?;
@@ -88,27 +102,35 @@ async fn main() -> Result<()> {
     let final_msg: String;
 
     loop {
-        println!("Gerando mensagem de commit com {}...", cfg.provider);
+        println!("{}", t!("main.generating", provider = cfg.provider));
         let msg = provider.generate(&diff, &cli.language).await?;
 
         if cli.print_only {
-            println!("\n--- Sugestão de Commit Message ---\n");
+            println!("{}", t!("main.suggestion_header"));
             println!("{}", msg);
-            println!("\n----------------------------------");
+            println!("{}", t!("main.suggestion_footer"));
             return Ok(());
         }
 
-        println!("\nSugestão: \x1b[1;32m{}\x1b[0m\n", msg);
+        println!(
+            "\n{}: \x1b[1;32m{}\x1b[0m\n",
+            t!("main.suggestion_label"),
+            msg
+        );
 
         let confirm_label = if cli.push {
-            "Confirmar (Commit & Push)"
+            t!("main.confirm_commit_push")
         } else {
-            "Confirmar (Commit)"
+            t!("main.confirm_commit")
         };
-        let options = vec![confirm_label, "Gerar Novamente", "Cancelar"];
+        let options = vec![
+            confirm_label.to_string(),
+            t!("main.regenerate").to_string(),
+            t!("main.cancel").to_string(),
+        ];
 
         let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("O que deseja fazer?")
+            .with_prompt(t!("main.what_to_do").to_string())
             .default(0)
             .items(&options)
             .interact()?;
@@ -119,11 +141,11 @@ async fn main() -> Result<()> {
                 break;
             }
             1 => {
-                println!("Tentando outra opção...\n");
+                println!("{}", t!("main.retrying"));
                 continue;
             }
             _ => {
-                println!("Operação cancelada pelo usuário.");
+                println!("{}", t!("main.cancelled"));
                 return Ok(());
             }
         }
@@ -134,30 +156,30 @@ async fn main() -> Result<()> {
         .arg("-m")
         .arg(&final_msg)
         .status()
-        .context("Falha ao executar git commit")?;
+        .context(t!("main.git_commit_context").to_string())?;
 
     if !commit_status.success() {
-        anyhow::bail!("O git commit falhou. Verifique se há arquivos staged.");
+        anyhow::bail!(t!("main.commit_failed").to_string());
     }
 
-    println!("Commit realizado com sucesso.");
+    println!("{}", t!("main.commit_success"));
 
     if !cli.push {
-        println!("Push não executado. Use -y/--push para enviar automaticamente após o commit.");
+        println!("{}", t!("main.push_not_executed"));
         return Ok(());
     }
 
-    println!("Executando git push...");
+    println!("{}", t!("main.pushing"));
 
     let push_status = Command::new("git")
         .arg("push")
         .status()
-        .context("Falha ao executar git push")?;
+        .context(t!("main.git_push_context").to_string())?;
 
     if push_status.success() {
-        println!("Sucesso! Alterações enviadas.");
+        println!("{}", t!("main.push_success"));
         return Ok(());
     }
 
-    anyhow::bail!("O git push falhou. Verifique sua conexão ou permissões.");
+    anyhow::bail!(t!("main.push_failed").to_string());
 }

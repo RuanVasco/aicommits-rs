@@ -69,11 +69,11 @@ impl CommitProvider for OpenAiCompatProvider {
         let res = req
             .send()
             .await
-            .context("Falha ao conectar no endpoint configurado")?;
+            .context(t!("provider.connect_failed").to_string())?;
 
         if !res.status().is_success() {
             let err = res.text().await?;
-            anyhow::bail!("Erro da API ({}): {}", self.model, err);
+            anyhow::bail!(t!("provider.api_error", model = self.model, err = err).to_string());
         }
 
         let response_json: ChatCompletionResponse = res.json().await?;
@@ -82,7 +82,7 @@ impl CommitProvider for OpenAiCompatProvider {
             .choices
             .into_iter()
             .next()
-            .context("Sem resposta")?
+            .context(t!("provider.no_response").to_string())?
             .message
             .content;
 
@@ -113,13 +113,13 @@ pub async fn list_models(base_url: &str, api_key: Option<&str>) -> Result<Vec<St
     let res = req.send().await?;
 
     if !res.status().is_success() {
-        anyhow::bail!("Falha ao listar modelos: {}", res.status());
+        anyhow::bail!(t!("provider.list_models_failed", status = res.status()).to_string());
     }
 
     let list: ListModelsResponse = res.json().await?;
 
     if list.data.is_empty() {
-        anyhow::bail!("Nenhum modelo encontrado no endpoint.");
+        anyhow::bail!(t!("provider.no_model_found").to_string());
     }
 
     let mut names: Vec<String> = list.data.into_iter().map(|m| m.id).collect();

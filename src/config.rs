@@ -47,7 +47,7 @@ struct LegacyAppConfig {
 
 fn get_config_path() -> Result<PathBuf> {
     let proj_dirs = ProjectDirs::from("com", "aicommits", "aicommits-rs")
-        .context("Não foi possível determinar o diretório home do usuário")?;
+        .context(t!("config.home_dir_error").to_string())?;
 
     let config_dir = proj_dirs.config_dir();
 
@@ -69,7 +69,7 @@ pub async fn load_or_setup() -> Result<AppConfig> {
         }
 
         if let Ok(legacy) = toml::from_str::<LegacyAppConfig>(&content) {
-            println!("Formato de configuração antigo detectado. Migrando para Gemini automaticamente...");
+            println!("{}", t!("config.legacy_migrating"));
             let migrated = AppConfig {
                 provider: ProviderConfig::Gemini {
                     api_key: legacy.api_key,
@@ -80,25 +80,25 @@ pub async fn load_or_setup() -> Result<AppConfig> {
             return Ok(migrated);
         }
 
-        anyhow::bail!("Arquivo de configuração corrompido. Rode 'aic setup' novamente.");
+        anyhow::bail!(t!("config.corrupted_config").to_string());
     }
 
-    println!("Nenhuma configuração encontrada. Iniciando setup...");
+    println!("{}", t!("config.no_config_found"));
     run_setup().await
 }
 
 pub async fn run_setup() -> Result<AppConfig> {
     let theme = ColorfulTheme::default();
 
-    println!("\nBem-vindo ao AI Commits RS! Vamos configurar.");
+    println!("{}", t!("config.welcome"));
 
     let provider_options = vec![
-        "Google Gemini (API na nuvem)",
-        "Endpoint OpenAI-compatible (Ollama, LM Studio, llama.cpp server, OpenAI, etc.)",
+        t!("config.provider_gemini_option").to_string(),
+        t!("config.provider_openai_option").to_string(),
     ];
 
     let provider_selection = Select::with_theme(&theme)
-        .with_prompt("Qual provider você quer usar?")
+        .with_prompt(t!("config.choose_provider").to_string())
         .default(0)
         .items(&provider_options)
         .interact()?;
@@ -109,23 +109,23 @@ pub async fn run_setup() -> Result<AppConfig> {
     };
 
     save_config(&config)?;
-    println!("Configuração salva com sucesso!\n");
+    println!("{}", t!("config.config_saved"));
 
     Ok(config)
 }
 
 async fn setup_gemini(theme: &ColorfulTheme) -> Result<AppConfig> {
-    println!("Obtenha sua chave em: https://aistudio.google.com/app/apikey\n");
+    println!("{}", t!("config.get_gemini_key"));
 
     let api_key: String = Input::with_theme(theme)
-        .with_prompt("Cole sua Google Gemini API Key")
+        .with_prompt(t!("config.paste_gemini_key").to_string())
         .interact_text()?;
 
     let models = match gemini::list_models(&api_key).await {
         Ok(list) => list,
         Err(e) => {
-            println!("Não foi possível listar modelos automaticamente: {}", e);
-            println!("Usando lista padrão de fallback.");
+            println!("{}", t!("config.models_list_failed", error = e));
+            println!("{}", t!("config.using_fallback_list"));
             vec![
                 "gemini-2.0-flash".to_string(),
                 "gemini-1.5-flash".to_string(),
@@ -135,7 +135,7 @@ async fn setup_gemini(theme: &ColorfulTheme) -> Result<AppConfig> {
     };
 
     let selection = Select::with_theme(theme)
-        .with_prompt("Escolha o modelo padrão")
+        .with_prompt(t!("config.choose_default_model").to_string())
         .default(0)
         .items(&models)
         .interact()?;
@@ -156,17 +156,17 @@ const DEFAULT_BASE_URL: &str = "http://localhost:11434/v1";
 
 async fn setup_openai_compatible(theme: &ColorfulTheme) -> Result<AppConfig> {
     println!(
-        "Informe a URL base do servidor (ex: {DEFAULT_BASE_URL} para Ollama, \
-        http://localhost:1234/v1 para LM Studio, https://api.openai.com/v1 para OpenAI)."
+        "{}",
+        t!("config.base_url_hint", default_url = DEFAULT_BASE_URL)
     );
 
     let base_url: String = Input::with_theme(theme)
-        .with_prompt("URL base")
+        .with_prompt(t!("config.base_url").to_string())
         .default(DEFAULT_BASE_URL.to_string())
         .interact_text()?;
 
     let api_key_input: String = Input::with_theme(theme)
-        .with_prompt("API Key (deixe em branco se o servidor local não exigir)")
+        .with_prompt(t!("config.api_key_optional").to_string())
         .allow_empty(true)
         .interact_text()?;
 
@@ -179,23 +179,33 @@ async fn setup_openai_compatible(theme: &ColorfulTheme) -> Result<AppConfig> {
     let model = match openai_compat::list_models(&base_url, api_key.as_deref()).await {
         Ok(list) if !list.is_empty() => {
             let selection = Select::with_theme(theme)
-                .with_prompt("Escolha o modelo")
+                .with_prompt(t!("config.choose_model").to_string())
                 .default(0)
                 .items(&list)
                 .interact()?;
             list[selection].clone()
         }
         Ok(_) => {
-            println!("Nenhum modelo encontrado em {base_url}.");
+            println!(
+                "{}",
+                t!("config.no_models_found", base_url = base_url.as_str())
+            );
             Input::with_theme(theme)
-                .with_prompt("Digite o nome do modelo")
+                .with_prompt(t!("config.enter_model_name").to_string())
                 .interact_text()?
         }
         Err(e) => {
-            println!("Não foi possível listar modelos automaticamente em {base_url}: {e}");
-            println!("Confira se o servidor está rodando nesse endereço.");
+            println!(
+                "{}",
+                t!(
+                    "config.models_list_failed_at",
+                    base_url = base_url.as_str(),
+                    error = e
+                )
+            );
+            println!("{}", t!("config.check_server_running"));
             Input::with_theme(theme)
-                .with_prompt("Digite o nome do modelo")
+                .with_prompt(t!("config.enter_model_name").to_string())
                 .interact_text()?
         }
     };
